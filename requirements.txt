@@ -1,0 +1,14 @@
+# Audio Processing & Feature Extraction
+librosa
+speechbrain
+soundfile
+
+# Machine Learning & Evaluation
+scikit-learn
+xgboost
+
+# Data Manipulation & Visualization
+pandas
+numpy
+matplotlib
+seaborn
