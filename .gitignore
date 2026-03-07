@@ -1,1 +1,3 @@
 *.sif
+data/
+tmp_model/

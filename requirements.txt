@@ -1,14 +1,18 @@
-# Audio Processing & Feature Extraction
+# Audio Processing
 librosa
 speechbrain
 soundfile
 
-# Machine Learning & Evaluation
+# The fix for the SpeechBrain / HuggingFace download bug
+huggingface_hub==0.21.4
+
+# Machine Learning
 scikit-learn
 xgboost
 
-# Data Manipulation & Visualization
+# Data Manipulation
 pandas
 numpy
 matplotlib
 seaborn
+openpyxl
