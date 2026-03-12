@@ -1,3 +1,4 @@
+import logging
 import os
 import glob
 import pandas as pd
@@ -22,6 +23,7 @@ def extract_features():
     dataset_rows = []
 
     for i, file_path in enumerate(mp3_files):
+        print(f"[{i+1}/{len(mp3_files)}] Processing: {os.path.basename(file_path)}", end="\r")
         # --- NEW LABEL LOGIC BASED ON YOUR FOLDERS ---
         if "dementia-audio" in file_path:
             label = 1

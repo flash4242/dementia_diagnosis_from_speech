@@ -16,3 +16,6 @@ numpy
 matplotlib
 seaborn
 openpyxl
+
+librosa
+praat-parselmouth
