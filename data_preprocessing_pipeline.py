@@ -10,6 +10,8 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import warnings
+from scipy.stats import shapiro, ttest_ind, mannwhitneyu
+from statsmodels.stats.multitest import multipletests
 
 # Ignore warnings for cleaner console output
 warnings.filterwarnings('ignore')
@@ -19,6 +21,8 @@ DATA_DIR = "./data"
 ECAPA_CSV_PATH = "ecapa_embeddings.csv"
 OUTPUT_RHYTHM_CSV = "speech_pause_features.csv"
 OUTPUT_REDUCED_CSV = "ecapa_pca_reduced.csv"
+SIGNIFICANCE_REPORT_CSV = "ecapa_significance_tests.csv"
+SELECTED_FEATURES_CSV = "ecapa_selected_features_data.csv"
 
 def run_eda_and_visualization(df):
     """Generates class distribution and embedding visualization (t-SNE)."""
@@ -233,19 +237,125 @@ def analyze_and_reduce_features(df):
     reduced_df.to_csv(OUTPUT_REDUCED_CSV, index=False)
     print(f"  -> Saved the reduced dataset to '{OUTPUT_REDUCED_CSV}'")
 
+def analyze_ecapa_significance(df):
+    """
+    Statisztikai szignifikancia vizsgálata (t-teszt/Mann-Whitney) 
+    és redundáns jellemzők szűrése.
+    """
+    print("\n" + "="*50)
+    print("STEP 4: STATISTICAL SIGNIFICANCE & FEATURE SELECTION")
+    print("="*50)
+
+    X = df.drop(columns=['filename', 'label'])
+    y = df['label']
+    features = X.columns
+    
+    # Csoportok szétválasztása
+    control = X[y == 0]
+    dementia = X[y == 1]
+    
+    stats_results = []
+
+    print(f"Testing {len(features)} features for group differences...")
+
+    for col in features:
+        # 1. Normalitás vizsgálat (Shapiro-Wilk)
+        # (Kis mintaszámnál fontos tudni, parametrikus-e az eloszlás)
+        try:
+            _, p_norm_c = shapiro(control[col])
+            _, p_norm_d = shapiro(dementia[col])
+            is_normal = p_norm_c > 0.05 and p_norm_d > 0.05
+        except:
+            is_normal = False
+        
+        # 2. Megfelelő teszt kiválasztása
+        if is_normal:
+            # Ha normál, jöhet a t-próba
+            stat, p_val = ttest_ind(control[col], dementia[col], nan_policy='omit')
+            test_type = "t-test"
+        else:
+            # Ha nem normál, a robusztusabb Mann-Whitney U teszt kell
+            stat, p_val = mannwhitneyu(control[col], dementia[col], alternative='two-sided')
+            test_type = "Mann-Whitney"
+            
+        stats_results.append({
+            'feature': col,
+            'p_value': p_val,
+            'test_type': test_type,
+            'is_normal': is_normal,
+            'control_mean': control[col].mean(),
+            'dementia_mean': dementia[col].mean()
+        })
+
+    # 3. Többszörös tesztelés korrekciója (Benjamini-Hochberg / FDR)
+    # Ez megakadályozza, hogy a 100+ teszt miatt fals pozitív eredményeket kapjunk.
+    stats_df = pd.DataFrame(stats_results)
+    stats_df['adj_p_value'] = multipletests(stats_df['p_value'].fillna(1.0), method='fdr_bh')[1]
+    
+    # Mentés: Teljes statisztikai jelentés
+    stats_df.to_csv(SIGNIFICANCE_REPORT_CSV, index=False)
+    print(f"  -> Saved statistical report to '{SIGNIFICANCE_REPORT_CSV}'")
+    
+    # Szignifikáns jellemzők kiválasztása (adj. p < 0.05)
+    significant_features = stats_df[stats_df['adj_p_value'] < 0.05]['feature'].tolist()
+    print(f"  -> Significant features found: {len(significant_features)}")
+
+    if not significant_features:
+        print("  WARNING: No significant features found after p-value correction!")
+        return [], stats_df
+
+    # 4. Redundancia szűrése (Multikollinearitás)
+    # Ha két szignifikáns jellemző korrelációja > 0.9, csak az egyiket tartjuk meg.
+    sig_X = X[significant_features]
+    corr_matrix = sig_X.corr().abs()
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    to_drop = [column for column in upper.columns if any(upper[column] > 0.90)]
+    
+    final_features = [f for f in significant_features if f not in to_drop]
+    print(f"  -> Features after redundancy filtering (r > 0.9): {len(final_features)}")
+
+    # Mentés: Csak a kiválasztott jellemzők adatai
+    selected_data = df[['filename', 'label'] + final_features]
+    selected_data.to_csv(SELECTED_FEATURES_CSV, index=False)
+    print(f"  -> Saved selected features data to '{SELECTED_FEATURES_CSV}'")
+
+    # Vizualizáció: Jellemzők egymás közötti korrelációs hőtérképe
+    if len(final_features) > 1:
+        plt.figure(figsize=(12, 10))
+        sns.heatmap(X[final_features].corr(), annot=False, cmap='coolwarm', center=0)
+        plt.title('Inter-Feature Correlation Matrix (Significant Features)')
+        plt.savefig('feature_inter_correlation_heatmap.png', bbox_inches='tight')
+        plt.close()
+        print("  -> Saved inter-feature correlation heatmap to 'feature_inter_correlation_heatmap.png'")
+
+    return final_features, stats_df
+
 
 def main():
     print("Loading initial ECAPA embeddings dataset...")
     try:
         df_ecapa = pd.read_csv(ECAPA_CSV_PATH)
     except FileNotFoundError:
-        print(f"Error: Could not find {ECAPA_CSV_PATH}. Please run the extraction script first.")
+        print(f"Error: Could not find {ECAPA_CSV_PATH}.")
         return
 
-    # Run the pipeline sequentially
+    # 1. Alap EDA
     run_eda_and_visualization(df_ecapa)
-    extract_rhythm_features()
-    analyze_and_reduce_features(df_ecapa)
+    
+    # 2. Ritmus jellemzők (ha az mp3-ak megvannak)
+    if os.path.exists(DATA_DIR):
+        extract_rhythm_features()
+    
+    # 3. ÚJ: Szignifikancia és szűrés
+    final_features, stats_report = analyze_ecapa_significance(df_ecapa)
+    
+    # 4. PCA és korreláció elemzés (már a szűrt adatokon)
+    if final_features:
+        # Itt érdemes a szűrt df-et átadni a PCA-nak
+        df_filtered = df_ecapa[['filename', 'label'] + final_features]
+        analyze_and_reduce_features(df_filtered)
+    else:
+        print("Skipping PCA as no significant features were found.")
     
     print("\n" + "="*50)
     print("PIPELINE EXECUTION COMPLETED SUCCESSFULLY!")
