@@ -94,13 +94,11 @@ def extract_features():
 
     for file_path in tqdm(cha_files):
 
-        # ---- Label logic ----
         if "dementia-trans" in file_path:
             label = 1
         elif "control-trans" in file_path:
             label = 0
         else:
-            print(f"Skipping {file_path} - unknown category.")
             continue
 
         try:
@@ -111,8 +109,10 @@ def extract_features():
 
             embedding = get_bert_embedding(text, tokenizer, model)
 
+            patient_id = extract_patient_id(file_path)
+
             row_data = {
-                "filename": os.path.basename(file_path),
+                "patient_id": patient_id,
                 "label": label
             }
 
