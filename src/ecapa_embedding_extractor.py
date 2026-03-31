@@ -1,3 +1,4 @@
+# A kód célja: Az ECAPA-TDNN modell segítségével jellemzőket (embeddingeket) kinyerni a hangfájlokból, majd ezeket egy CSV fájlba menteni, ahol minden sor egy fájlt reprezentál, és oszlopokban vannak az embedding értékek és a címkék (Demencia vagy Kontroll).
 import logging
 import os
 import glob
@@ -7,13 +8,13 @@ import torchaudio
 from speechbrain.inference.speaker import EncoderClassifier
 
 DATA_DIR = "./data"
-OUTPUT_CSV = "ecapa_embeddings.csv"
+OUTPUT_CSV = "./csv_output/ecapa_embeddings.csv"
 
 def extract_features():
     print("Loading ECAPA-TDNN model from SpeechBrain...")
     classifier = EncoderClassifier.from_hparams(
         source="speechbrain/spkrec-ecapa-voxceleb", 
-        savedir="tmp_model",
+        savedir="./tmp_model",
         run_opts={"device":"cuda" if torch.cuda.is_available() else "cpu"}
     )
 
