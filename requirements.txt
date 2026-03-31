@@ -21,5 +21,4 @@ seaborn
 openpyxl
 
 statsmodels
-librosa
 praat-parselmouth
