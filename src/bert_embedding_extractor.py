@@ -6,8 +6,8 @@ from transformers import AutoTokenizer, AutoModel
 from tqdm import tqdm
 
 DATA_DIR = "./data"
-OUTPUT_CSV = "bert_embeddings.csv"
-
+OUTPUT_CSV = "./csv_output/bert_embeddings.csv"
+os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -50,9 +50,10 @@ def read_cha_file(path):
 
 def extract_patient_id(file_path):
     filename = os.path.basename(file_path)
-    patient_id = filename.split("-")[0]
+    # A split helyett csak a .cha kiterjesztést vágjuk le!
+    # Így a 002-1.cha-ból 002-1 marad (String formátumban).
+    patient_id = os.path.splitext(filename)[0]
     return patient_id
-
 # ----------------------------
 # BERT Embedding
 # ----------------------------
