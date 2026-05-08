@@ -3,10 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import xgboost as xgb
-from sklearn.model_selection import StratifiedKFold, GridSearchCV
+from sklearn.model_selection import StratifiedGroupKFold, GridSearchCV
 from sklearn.metrics import (accuracy_score, roc_auc_score, classification_report, 
-                             confusion_matrix, roc_curve, balanced_accuracy_score)
+                             confusion_matrix, roc_curve, balanced_accuracy_score,
+                             precision_recall_curve, average_precision_score)
 import os
+import wandb
 
 
 
@@ -45,12 +47,10 @@ def load_and_merge_data():
     df_ecapa = df_ecapa.drop(columns=['filename'])
     df_bert = df_bert.drop(columns=['patient_id'])
 
+    df_ecapa.columns = [f"{col}_ecapa" if col.startswith('e_') else col for col in df_ecapa.columns]
+    df_bert.columns = [f"{col}_bert" if col.startswith('e_') else col for col in df_bert.columns]
     # 5. Fúzió a base_id és label alapján, suffixekkel
-    df_merged = pd.merge(df_ecapa, 
-                         df_bert, 
-                         on=['base_id', 'label'], 
-                         how='inner', 
-                         suffixes=('_ecapa', '_bert'))
+    df_merged = pd.merge(df_ecapa, df_bert, on=['base_id', 'label'], how='inner')
     
     print(f"  -> SIKERES FÚZIÓ: {df_merged.shape[0]} közös minta, összesen {df_merged.shape[1]-2} prediktor.\n")
     return df_merged
@@ -59,12 +59,13 @@ def train_and_evaluate_nested_cv(df):
     print("2. Lépés: Nested Cross-Validation indítása...")
     
     y = df['label']
-    # A base_id-t és a címkét kivesszük a bemeneti jellemzők közül
+    groups = df['base_id'].apply(lambda x: x.split('-')[0]) 
+    
     X = df.drop(columns=['base_id', 'label']) 
     pos_weight = (y == 0).sum() / (y == 1).sum()
 
-    # --- KÜLSŐ CV (Teljesítmény becsléséhez) ---
-    outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    # --- KÜLSŐ CV - StratifiedGroupKFold használata, hogy ugyanazon páciens ne kerülhessen test és train fold-ba is egyszerre (hiszen egy páciensnek van több felvétele is)
+    outer_cv = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
 
     # Hiperparaméter háló (Az XGBoost megbirkózik a ~960 dimenzióval)
     param_grid = {
@@ -79,13 +80,17 @@ def train_and_evaluate_nested_cv(df):
 
     print("  -> Modellek tanítása és hangolása a hajtásokon (Inner + Outer CV)...")
 
-    for fold, (train_idx, test_idx) in enumerate(outer_cv.split(X, y)):
+    # A split metódusnak meg kell adni a groups változót!
+    for fold, (train_idx, test_idx) in enumerate(outer_cv.split(X, y, groups=groups)):
         print(f"     Hajtás {fold+1}/5 folyamatban...")
         X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
         y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
         
-        # --- BELSŐ CV ---
-        inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        # Kinyerjük az aktuális hajtás tanító csoportjait (ez kell a belső CV-nek)
+        groups_train = groups.iloc[train_idx]
+        
+        # --- BELSŐ CV (StratifiedGroupKFold) ---
+        inner_cv = StratifiedGroupKFold(n_splits=3, shuffle=True, random_state=42)
         
         xgb_clf = xgb.XGBClassifier(
             objective='binary:logistic', eval_metric='auc',
@@ -97,7 +102,8 @@ def train_and_evaluate_nested_cv(df):
             scoring='roc_auc', cv=inner_cv, n_jobs=-1, verbose=0
         )
         
-        grid_search.fit(X_train, y_train)
+        # Tanítás és hangolás a belső CV-vel (itt adjuk át a csoportokat!)
+        grid_search.fit(X_train, y_train, groups=groups_train)
         best_fold_model = grid_search.best_estimator_
         
         probs = best_fold_model.predict_proba(X_test)[:, 1]
@@ -137,7 +143,6 @@ def train_and_evaluate_nested_cv(df):
     plt.close()
 
     # Precision-Recall Görbe
-    from sklearn.metrics import precision_recall_curve, average_precision_score
     precisions, recalls, pr_thresholds = precision_recall_curve(y, out_of_fold_probs)
     ap_score = average_precision_score(y, out_of_fold_probs)
     
@@ -195,9 +200,12 @@ def train_and_evaluate_nested_cv(df):
     print("5. Lépés: Feature Importance generálása a teljes adaton...")
     final_grid = GridSearchCV(
         estimator=xgb.XGBClassifier(objective='binary:logistic', eval_metric='auc', scale_pos_weight=pos_weight, random_state=42),
-        param_grid=param_grid, scoring='roc_auc', cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42), n_jobs=-1
+        param_grid=param_grid, 
+        scoring='roc_auc', 
+        cv=StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42), # <--- CSERÉLVE
+        n_jobs=-1
     )
-    final_grid.fit(X, y)
+    final_grid.fit(X, y, groups=groups) # <--- CSERÉLVE (groups átadása)
     production_model = final_grid.best_estimator_
 
     plt.figure(figsize=(12, 8))
@@ -209,7 +217,36 @@ def train_and_evaluate_nested_cv(df):
     plt.close()
     print(f"\n[✔] Minden ábra sikeresen mentve a '{PLOT_DIR}' mappába.")
 
+    # --- 6. Lépés: Weights & Biases Naplózás ---
+    print("\n6. Lépés: Eredmények és ábrák feltöltése a W&B-be...")
+    
+    # A legjobb hiperparaméterek naplózása a production modellből
+    wandb.config.update(final_grid.best_params_)
+    
+    # Metrikák és ábrák feltöltése
+    wandb.log({
+        "test_roc_auc": auc_score,
+        "test_uar": uar_score,
+        "test_accuracy": acc_score,
+        "optimal_threshold": optimal_threshold,
+        "probability_distribution": wandb.Image(os.path.join(PLOT_DIR, 'multimodal_probability_distribution.png')),
+        "precision_recall_curve": wandb.Image(os.path.join(PLOT_DIR, 'multimodal_precision_recall_curve.png')),
+        "roc_curve": wandb.Image(os.path.join(PLOT_DIR, 'multimodal_roc_curve.png')),
+        "confusion_matrix": wandb.Image(os.path.join(PLOT_DIR, 'multimodal_confusion_matrix.png')),
+        "feature_importance": wandb.Image(os.path.join(PLOT_DIR, 'multimodal_xgboost_feature_importance.png'))
+    })
+    print("  -> W&B feltöltés sikeres!")
+
 if __name__ == "__main__":
+    # W&B inicializálása
+    wandb.init(
+        project="dementia-diagnosis", 
+        name="multimodal-xgboost-baseline",
+        notes="Nested CV XGBoost ECAPA és BERT fúzióval, 85% Recall orvosi küszöbbel."
+    )
+    
     df_merged = load_and_merge_data()
     if df_merged is not None:
         train_and_evaluate_nested_cv(df_merged)
+        
+    wandb.finish()

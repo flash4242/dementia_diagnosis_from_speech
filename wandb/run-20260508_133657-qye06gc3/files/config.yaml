@@ -1,0 +1,65 @@
+_wandb:
+    value:
+        cli_version: 0.22.2
+        e:
+            xbaiw0oc331ajgt64tckpe5mj7o13zd6:
+                codePath: src/multimodal_xgboost.py
+                codePathLocal: src/multimodal_xgboost.py
+                cpu_count: 16
+                cpu_count_logical: 16
+                cudaVersion: "12.4"
+                disk:
+                    /:
+                        total: "200654405632"
+                        used: "176334024704"
+                email: nagydavid02@gmail.com
+                executable: /opt/conda/bin/python
+                git:
+                    commit: 35b18c13d3715fc28d591968fa65c43bb2fbabd1
+                    remote: https://github.com/flash4242/dementia_diagnosis_from_speech.git
+                gpu: GRID V100DX-32C
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Volta
+                      cudaCores: 5120
+                      memoryTotal: "34359738368"
+                      name: GRID V100DX-32C
+                      uuid: GPU-b5b9cffa-bf36-11f0-a5d1-bd914ea34003
+                host: dbb2bf5542d8
+                memory:
+                    total: "67424542720"
+                os: Linux-6.8.0-87-generic-x86_64-with-glibc2.35
+                program: /home/src/multimodal_xgboost.py
+                python: CPython 3.11.9
+                root: /home
+                startedAt: "2026-05-08T13:36:57.590983Z"
+                writerId: xbaiw0oc331ajgt64tckpe5mj7o13zd6
+        m: []
+        python_version: 3.11.9
+        t:
+            "1":
+                - 5
+                - 6
+                - 53
+                - 105
+            "2":
+                - 5
+                - 6
+                - 53
+                - 105
+            "3":
+                - 13
+            "4": 3.11.9
+            "5": 0.22.2
+            "12": 0.22.2
+            "13": linux-x86_64
+colsample_bytree:
+    value: 0.8
+learning_rate:
+    value: 0.1
+max_depth:
+    value: 3
+n_estimators:
+    value: 100
+subsample:
+    value: 0.7

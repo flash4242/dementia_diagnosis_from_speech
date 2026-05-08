@@ -3,10 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import xgboost as xgb
-from sklearn.model_selection import StratifiedKFold, GridSearchCV
+# MÓDOSÍTÁS 1: StratifiedGroupKFold importálása
+from sklearn.model_selection import StratifiedGroupKFold, GridSearchCV
 from sklearn.metrics import (accuracy_score, roc_auc_score, classification_report, 
                              confusion_matrix, roc_curve, balanced_accuracy_score)
-import warnings
+import warnings, os
 
 # Figyelmeztetések kikapcsolása
 warnings.filterwarnings('ignore')
@@ -15,6 +16,8 @@ warnings.filterwarnings('ignore')
 CSV_DIR = "csv_output" 
 ECAPA_CSV = CSV_DIR + "/ecapa_embeddings.csv"
 RHYTHM_CSV = CSV_DIR + "/speech_pause_features.csv"
+PLOT_DIR = "./plots"
+os.makedirs(PLOT_DIR, exist_ok=True)
 
 def load_and_merge_data():
     print("1. Lépés: Adatok betöltése és fúziója...")
@@ -33,11 +36,15 @@ def train_and_evaluate_nested_cv(df):
     print("2. Lépés: Nested Cross-Validation (Beágyazott CV) indítása...")
     
     y = df['label']
+    
+    # MÓDOSÍTÁS 2: Páciens ID-k (csoportok) kinyerése a filename-ből (pl. "192-2.mp3" -> "192")
+    groups = df['filename'].apply(lambda x: str(x).split('-')[0])
+    
     X = df.drop(columns=['filename', 'label'])
     pos_weight = (y == 0).sum() / (y == 1).sum()
 
-    # --- KÜLSŐ CV (Teljesítmény becsléséhez) ---
-    outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    # MÓDOSÍTÁS 3: KÜLSŐ CV lecserélése StratifiedGroupKFold-ra
+    outer_cv = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
 
     # Hiperparaméter háló
     param_grid = {
@@ -53,13 +60,17 @@ def train_and_evaluate_nested_cv(df):
 
     print("  -> Modellek tanítása és hangolása a hajtásokon (Inner + Outer CV)...")
 
-    for fold, (train_idx, test_idx) in enumerate(outer_cv.split(X, y)):
+    # MÓDOSÍTÁS 4: groups paraméter átadása a split-nek
+    for fold, (train_idx, test_idx) in enumerate(outer_cv.split(X, y, groups=groups)):
         print(f"     Hajtás {fold+1}/5 folyamatban...")
         X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
         y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
         
-        # --- BELSŐ CV (Kizárólag a tréning adatokon a paraméterek hangolására) ---
-        inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        # Kinyerjük a belső CV számára a tréning halmazba került csoportokat
+        groups_train = groups.iloc[train_idx]
+        
+        # MÓDOSÍTÁS 5: BELSŐ CV lecserélése StratifiedGroupKFold-ra
+        inner_cv = StratifiedGroupKFold(n_splits=3, shuffle=True, random_state=42)
         
         xgb_clf = xgb.XGBClassifier(
             objective='binary:logistic', eval_metric='auc',
@@ -71,8 +82,8 @@ def train_and_evaluate_nested_cv(df):
             scoring='roc_auc', cv=inner_cv, n_jobs=-1, verbose=0
         )
         
-        # Tanítás és hangolás a belső CV-vel
-        grid_search.fit(X_train, y_train)
+        # MÓDOSÍTÁS 6: groups paraméter átadása a betanításkor (GridSearchCV számára)
+        grid_search.fit(X_train, y_train, groups=groups_train)
         best_fold_model = grid_search.best_estimator_
         
         # Predikció a külső teszthalmazon
@@ -123,9 +134,8 @@ def train_and_evaluate_nested_cv(df):
     plt.xlabel('Prediktált valószínűség a Demenciára (0.0 - 1.0)')
     plt.ylabel('Sűrűség (Minta aránya)')
     plt.legend()
-    plt.savefig('probability_distribution.png', bbox_inches='tight')
+    plt.savefig(os.path.join(PLOT_DIR, 'ecapa_probability_distribution.png'), bbox_inches='tight')
     plt.close()
-    print("  -> Ábra mentve: 'probability_distribution.png'")
 
     # --- Precision-Recall Görbe ---
     from sklearn.metrics import precision_recall_curve, average_precision_score
@@ -140,9 +150,8 @@ def train_and_evaluate_nested_cv(df):
     plt.title('Precision-Recall Görbe')
     plt.legend(loc="lower left")
     plt.grid(True, alpha=0.3)
-    plt.savefig('precision_recall_curve.png', bbox_inches='tight')
+    plt.savefig(os.path.join(PLOT_DIR, 'ecapa_precision_recall_curve.png'), bbox_inches='tight')
     plt.close()
-    print("  -> Ábra mentve: 'precision_recall_curve.png'")
 
     # --- 4. Lépés: Végső Kiértékelés ---
     print("\n4. Lépés: Végső kiértékelés az optimális küszöbbel...")
@@ -167,9 +176,8 @@ def train_and_evaluate_nested_cv(df):
     plt.ylabel('Valós Pozitív Ráta (Szenzitivitás)')
     plt.title('Receiver Operating Characteristic (ROC)')
     plt.legend(loc="lower right")
-    plt.savefig('roc_curve.png', bbox_inches='tight')
+    plt.savefig(os.path.join(PLOT_DIR, 'ecapa_roc_curve.png'), bbox_inches='tight')
     plt.close()
-    print("  -> Ábra mentve: 'roc_curve.png'")
 
     print("\n" + "="*55)
     print("VÉGSŐ EREDMÉNYEK (Nested CV - Out-of-Fold Predicts)")
@@ -191,18 +199,18 @@ def train_and_evaluate_nested_cv(df):
                 yticklabels=['Valós Control', 'Valós Dementia'],
                 annot_kws={"size": 16})
     plt.title(f'Tévesztési Mátrix (Optimális Küszöb: {optimal_threshold:.4f})', fontsize=14)
-    plt.savefig('confusion_matrix.png', bbox_inches='tight')
+    plt.savefig(os.path.join(PLOT_DIR, 'ecapa_confusion_matrix.png'), bbox_inches='tight')
     plt.close()
-    print("  -> Ábra mentve: 'confusion_matrix.png'")
 
     # --- Feature Importance (Production Modell) ---
-    # Mivel a Nested CV 5 különböző modellt eredményez, a végső Feature Importance
-    # ábrához betanítunk egy "Production" modellt a teljes adaton.
+    # MÓDOSÍTÁS 7: Végső grid search-ben is StratifiedGroupKFold alkalmazása
     final_grid = GridSearchCV(
         estimator=xgb.XGBClassifier(objective='binary:logistic', eval_metric='auc', scale_pos_weight=pos_weight, random_state=42),
-        param_grid=param_grid, scoring='roc_auc', cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42), n_jobs=-1
+        param_grid=param_grid, scoring='roc_auc', 
+        cv=StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42), n_jobs=-1
     )
-    final_grid.fit(X, y)
+    # MÓDOSÍTÁS 8: groups paraméter átadása a végső betanításkor
+    final_grid.fit(X, y, groups=groups)
     production_model = final_grid.best_estimator_
 
     plt.figure(figsize=(12, 8))
@@ -210,9 +218,8 @@ def train_and_evaluate_nested_cv(df):
                         title='XGBoost - Top 20 Jellemző (Teljes adaton tanítva)', 
                         xlabel='Információ nyereség (Gain)', ylabel='Jellemző neve', height=0.6)
     plt.tight_layout()
-    plt.savefig('xgboost_fused_feature_importance.png')
+    plt.savefig(os.path.join(PLOT_DIR, 'ecapa_feature_importance.png'), bbox_inches='tight')
     plt.close()
-    print("  -> Ábra mentve: 'xgboost_fused_feature_importance.png'")
 
 if __name__ == "__main__":
     df_merged = load_and_merge_data()
