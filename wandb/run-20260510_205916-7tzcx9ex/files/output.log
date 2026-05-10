@@ -1,0 +1,34 @@
+1. Lépés: Adatok betöltése és fúziója (ECAPA + BERT)...
+  -> SIKERES FÚZIÓ: 552 közös minta, összesen 960 prediktor.
+
+2. Lépés: Nested Cross-Validation indítása...
+  -> Modellek tanítása és hangolása a hajtásokon (Inner + Outer CV)...
+     Hajtás 1/5 folyamatban...
+     Hajtás 2/5 folyamatban...
+Traceback (most recent call last):
+  File "/home/src/multimodal_xgboost.py", line 250, in <module>
+    plt.tight_layout()
+        ^^^^^^^^^^^^^^^
+  File "/home/src/multimodal_xgboost.py", line 106, in train_and_evaluate_nested_cv
+    # Tanítás és hangolás a belső CV-vel
+  File "/opt/conda/lib/python3.11/site-packages/sklearn/base.py", line 1365, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/sklearn/model_selection/_search.py", line 1051, in fit
+    self._run_search(evaluate_candidates)
+  File "/opt/conda/lib/python3.11/site-packages/sklearn/model_selection/_search.py", line 1605, in _run_search
+    evaluate_candidates(ParameterGrid(self.param_grid))
+  File "/opt/conda/lib/python3.11/site-packages/sklearn/model_selection/_search.py", line 997, in evaluate_candidates
+    out = parallel(
+          ^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/sklearn/utils/parallel.py", line 82, in __call__
+    return super().__call__(iterable_with_config_and_warning_filters)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/joblib/parallel.py", line 2072, in __call__
+    return output if self.return_generator else list(output)
+                                                ^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/joblib/parallel.py", line 1682, in _get_outputs
+    yield from self._retrieve()
+  File "/opt/conda/lib/python3.11/site-packages/joblib/parallel.py", line 1800, in _retrieve
+    time.sleep(0.01)
+KeyboardInterrupt

@@ -104,10 +104,44 @@ def train_and_evaluate_nested_cv(df):
         
         # Tanítás és hangolás a belső CV-vel (itt adjuk át a csoportokat!)
         grid_search.fit(X_train, y_train, groups=groups_train)
-        best_fold_model = grid_search.best_estimator_
         
-        probs = best_fold_model.predict_proba(X_test)[:, 1]
+        # --- ÚJ RÉSZ: Tanulási görbék kinyerése fánként (Boosting Rounds) ---
+        best_params = grid_search.best_params_
+        
+        # Létrehozunk egy modellt a GridSearch által talált legjobb paraméterekkel
+        fold_model = xgb.XGBClassifier(
+            objective='binary:logistic', 
+            eval_metric=['auc', 'logloss'], # Két metrikát is követünk!
+            scale_pos_weight=pos_weight, 
+            random_state=42,
+            **best_params
+        )
+        
+        # Betanítjuk az eval_set megadásával (ez utasítja az XGBoost-ot, hogy lépésenként logoljon)
+        fold_model.fit(
+            X_train, y_train,
+            eval_set=[(X_train, y_train), (X_test, y_test)],
+            verbose=False
+        )
+        
+        # Predikció a külső teszthalmazon a küszöbkereséshez
+        probs = fold_model.predict_proba(X_test)[:, 1]
         out_of_fold_probs[test_idx] = probs
+
+        # --- W&B FOLYAMATOS NAPLÓZÁS ---
+        evals_result = fold_model.evals_result()
+        num_trees = len(evals_result['validation_0']['auc'])
+        
+        # Végigmegyünk az összes fán (epoch), és beküldjük a W&B-be
+        for i in range(num_trees):
+            wandb.log({
+                f"Fold_{fold+1}/Train_AUC": evals_result['validation_0']['auc'][i],
+                f"Fold_{fold+1}/Val_AUC": evals_result['validation_1']['auc'][i],
+                f"Fold_{fold+1}/Train_LogLoss": evals_result['validation_0']['logloss'][i],
+                f"Fold_{fold+1}/Val_LogLoss": evals_result['validation_1']['logloss'][i],
+                "boosting_round": i
+            })
+        
 
     # --- 3. Lépés: Klinikai (Szenzitivitás-vezérelt) Küszöb keresése ---
     print("\n3. Lépés: Klinikai osztályozási küszöbérték meghatározása...")
