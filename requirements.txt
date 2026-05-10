@@ -2,23 +2,21 @@
 librosa
 speechbrain
 soundfile
+praat-parselmouth
 
-#Transcript processing
+# Transcript processing
 transformers
-
-# The fix for the SpeechBrain / HuggingFace download bug
 huggingface_hub==0.21.4
 
-# Machine Learning
-scikit-learn
-xgboost
+# Machine Learning & Tracking
+scikit-learn==1.7.2
+xgboost==3.2.0
+wandb==0.22.2
 
-# Data Manipulation
-pandas
-numpy
-matplotlib
-seaborn
+# Data Manipulation & Viz
+pandas==2.3.3
+numpy==2.1.1
+matplotlib==3.10.7
+seaborn==0.13.2
 openpyxl
-
 statsmodels
-praat-parselmouth
