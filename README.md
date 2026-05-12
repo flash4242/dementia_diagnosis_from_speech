@@ -1,2 +1,5 @@
 # Dementia diagnosis from speech
 Dementia is a disease involving progressive cognitive decline, which is associated with damage to the nerve cells responsible for learning, memory, and thinking. The disease progresses slowly: after an initial asymptomatic phase, mild cognitive impairment appears, followed by severe dementia, which makes everyday life impossible. The symptoms of dementia are not only noticeable in the deterioration of cognitive abilities, but also in changes in speech. For example, a dementia patient may pause frequently while speaking and have difficulty finding the right words. Since artificial intelligence can effectively recognize patterns in both voice and text-based data, our project aims to develop a system that assesses the patient's condition based on audio recordings.
+
+<img width="1870" height="434" alt="image" src="https://github.com/user-attachments/assets/6e2c4dc4-9f09-4a64-961a-549dbf16166b" />
+
