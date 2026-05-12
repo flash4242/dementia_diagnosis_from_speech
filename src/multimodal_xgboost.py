@@ -9,6 +9,8 @@ from sklearn.metrics import (accuracy_score, roc_auc_score, classification_repor
                              precision_recall_curve, average_precision_score)
 import os
 import wandb
+import joblib
+
 
 
 
@@ -250,6 +252,17 @@ def train_and_evaluate_nested_cv(df):
     plt.savefig(os.path.join(PLOT_DIR, 'multimodal_xgboost_feature_importance.png'))
     plt.close()
     print(f"\n[✔] Minden ábra sikeresen mentve a '{PLOT_DIR}' mappába.")
+
+    # MODELL MENTÉSE INFERENCE-hez
+    MODEL_DIR = "./saved_models"
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    joblib.dump(production_model, os.path.join(MODEL_DIR, 'multimodal_xgboost.pkl'))
+    
+    # A klinikai küszöböt is el kell mentenünk!
+    with open(os.path.join(MODEL_DIR, 'optimal_threshold.txt'), 'w') as f:
+        f.write(str(optimal_threshold))
+        
+    print(f"  -> Modell és küszöb elmentve a {MODEL_DIR} mappába.")
 
     # --- 6. Lépés: Weights & Biases Naplózás ---
     print("\n6. Lépés: Eredmények és ábrák feltöltése a W&B-be...")

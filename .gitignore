@@ -2,3 +2,7 @@
 data/
 tmp_model/
 wandb/
+saved_models/
+__pycache__/
+.gradio/
+david/

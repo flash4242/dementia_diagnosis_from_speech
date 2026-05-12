@@ -5,8 +5,7 @@ soundfile
 praat-parselmouth
 
 # Transcript processing
-transformers
-huggingface_hub==0.21.4
+transformers==4.44.2
 
 # Machine Learning & Tracking
 scikit-learn==1.7.2
@@ -20,3 +19,8 @@ matplotlib==3.10.7
 seaborn==0.13.2
 openpyxl
 statsmodels
+
+# Web App & API
+gradio
+fastapi
+pydantic
